@@ -1,8 +1,10 @@
-use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, Result, Row};
+use chrono::Utc;
+use rusqlite::{params, Connection, Result};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Recording {
     pub id: i64,
     pub timestamp: String,
@@ -17,7 +19,8 @@ pub struct Recording {
     pub error_message: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Correction {
     pub id: i64,
     pub whisper_pattern: String,
@@ -94,6 +97,7 @@ impl Database {
         Ok(recordings)
     }
 
+    #[allow(dead_code)]
     pub fn get_recording(&self, id: i64) -> Result<Option<Recording>> {
         let mut stmt = self.conn.prepare("SELECT * FROM recordings WHERE id = ?")?;
 
@@ -119,23 +123,13 @@ impl Database {
     }
 
     pub fn update_correction(&self, recording_id: i64, user_correction: &str) -> Result<()> {
+        // Only annotate this recording. Word-level correction patterns are added
+        // explicitly via the Corrections tab — saving whole transcripts here used
+        // to bloat the LLM prompt with useless full-sentence "patterns".
         self.conn.execute(
             "UPDATE recordings SET user_correction = ? WHERE id = ?",
             params![user_correction, recording_id],
         )?;
-
-        // Also save as a correction pattern
-        if let Some(recording) = self.get_recording(recording_id)? {
-            if let Some(whisper_output) = recording.whisper_output {
-                let now = Utc::now().to_rfc3339();
-                self.conn.execute(
-                    "INSERT INTO corrections (whisper_pattern, intended_text, created_at)
-                     VALUES (?, ?, ?)",
-                    params![whisper_output, user_correction, now],
-                )?;
-            }
-        }
-
         Ok(())
     }
 
@@ -144,6 +138,35 @@ impl Database {
             "DELETE FROM recordings WHERE id = ?",
             params![recording_id],
         )?;
+        Ok(())
+    }
+
+    pub fn add_correction(&self, whisper_pattern: &str, intended_text: &str) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        self.conn.execute(
+            "INSERT INTO corrections (whisper_pattern, intended_text, created_at)
+             VALUES (?, ?, ?)",
+            params![whisper_pattern, intended_text, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn edit_correction(
+        &self,
+        id: i64,
+        whisper_pattern: &str,
+        intended_text: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE corrections SET whisper_pattern = ?, intended_text = ? WHERE id = ?",
+            params![whisper_pattern, intended_text, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_correction(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM corrections WHERE id = ?", params![id])?;
         Ok(())
     }
 
@@ -166,6 +189,7 @@ impl Database {
         Ok(corrections)
     }
 
+    #[allow(dead_code)] // kept for reference; voice-input.sh builds this context in bash
     pub fn export_corrections_for_prompt(&self) -> Result<String> {
         let corrections = self.get_corrections()?;
 

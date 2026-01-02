@@ -29,7 +29,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Flüstern daemon started"
+echo "Plauder daemon started"
 
 # If tray icon disabled, just keep daemon alive
 if [[ "$TRAY_ICON" != "true" ]]; then
@@ -48,9 +48,9 @@ echo "idle" > "$ICON_STATE_FILE"
 # Run yad with menu
 yad --notification \
     --image="$ICON_DIR/idle.svg" \
-    --text="Flüstern - Ready" \
+    --text="Plauder - Ready" \
     --menu="Toggle Recording!$SCRIPT_DIR/voice-input.sh|\
-Einstellungen & Historie!$SCRIPT_DIR/fluistern-gui|\
+Einstellungen & Historie!$SCRIPT_DIR/plauder-gui|\
 Select Microphone!$SCRIPT_DIR/select-mic.sh|\
 Select Language!$SCRIPT_DIR/select-language.sh|\
 Quit!quit" \

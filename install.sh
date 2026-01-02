@@ -1,14 +1,14 @@
 #!/bin/bash
-# Flüstern Installation Script
+# Plauder Installation Script
 # Voice dictation for Linux using Groq Whisper API
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="$HOME/.local/share/fluistern"
+INSTALL_DIR="$HOME/.local/share/plauder"
 BIN_DIR="$HOME/.local/bin"
 
-echo "=== Flüstern Installer ==="
+echo "=== Plauder Installer ==="
 echo "Voice dictation for Linux"
 echo
 
@@ -27,6 +27,19 @@ command -v notify-send >/dev/null 2>&1 || MISSING+=("libnotify")
 command -v yad >/dev/null 2>&1 || MISSING+=("yad")
 command -v sqlite3 >/dev/null 2>&1 || MISSING+=("sqlite3")
 command -v cargo >/dev/null 2>&1 || MISSING+=("cargo" "rust")
+command -v node >/dev/null 2>&1 || MISSING+=("nodejs")
+command -v pnpm >/dev/null 2>&1 || MISSING+=("pnpm")
+
+# Tauri needs the WebKitGTK 4.1 runtime/dev libs to build the GUI.
+if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+    echo "Note: WebKitGTK 4.1 dev libs are required to build the Tauri GUI."
+    echo "  Arch:          sudo pacman -S webkit2gtk-4.1 libappindicator-gtk3 librsvg"
+    echo "  Ubuntu/Debian: sudo apt install libwebkit2gtk-4.1-dev build-essential libssl-dev \\"
+    echo "                   libayatana-appindicator3-dev librsvg2-dev"
+    echo "  Fedora:        sudo dnf install webkit2gtk4.1-devel openssl-devel \\"
+    echo "                   libappindicator-gtk3-devel librsvg2-devel"
+    echo
+fi
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
     echo "Missing packages: ${MISSING[*]}"
@@ -57,18 +70,23 @@ fi
 echo "All dependencies installed!"
 echo
 
-# Build Rust GUI
-echo "Building Rust GUI..."
+# Build Tauri GUI (React frontend + Rust backend)
+echo "Building GUI (Tauri + React)..."
 cd "$SCRIPT_DIR"
-cargo build --release
-if [[ $? -ne 0 ]]; then
-    echo "Failed to build Rust GUI"
+pnpm install
+if ! pnpm tauri build --no-bundle; then
+    echo "Failed to build Tauri GUI"
     exit 1
 fi
-echo "Rust GUI built successfully!"
+GUI_BIN="$SCRIPT_DIR/src-tauri/target/release/plauder-gui"
+if [[ ! -f "$GUI_BIN" ]]; then
+    echo "GUI binary not found at $GUI_BIN"
+    exit 1
+fi
+echo "GUI built successfully!"
 echo
 
-# Install files to ~/.local/share/fluistern
+# Install files to ~/.local/share/plauder
 echo "Installing to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$BIN_DIR"
@@ -79,9 +97,9 @@ cp "$SCRIPT_DIR/voice-input.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/voice-input-daemon.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/select-mic.sh" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/select-language.sh" "$INSTALL_DIR/"
-cp "$SCRIPT_DIR/target/release/fluistern-gui" "$INSTALL_DIR/"
+cp "$GUI_BIN" "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR"/*.sh
-chmod +x "$INSTALL_DIR/fluistern-gui"
+chmod +x "$INSTALL_DIR/plauder-gui"
 
 # Create .env from example if it doesn't exist
 if [[ ! -f "$INSTALL_DIR/.env" ]]; then
@@ -93,8 +111,36 @@ if [[ ! -f "$INSTALL_DIR/.env" ]]; then
 fi
 
 # Create symlink in ~/.local/bin
-ln -sf "$INSTALL_DIR/voice-input.sh" "$BIN_DIR/fluistern"
-echo "Created symlink: $BIN_DIR/fluistern"
+ln -sf "$INSTALL_DIR/voice-input.sh" "$BIN_DIR/plauder"
+echo "Created symlink: $BIN_DIR/plauder"
+
+# Install desktop entry + icon so the GUI shows up in app launchers
+echo "Installing launcher entry..."
+APP_DIR="$HOME/.local/share/applications"
+ICON_DIR="$HOME/.local/share/icons/hicolor/128x128/apps"
+mkdir -p "$APP_DIR" "$ICON_DIR"
+cp "$SCRIPT_DIR/src-tauri/icons/128x128.png" "$ICON_DIR/plauder.png"
+cp "$SCRIPT_DIR/src-tauri/icons/icon.png" "$INSTALL_DIR/icon.png"
+# Generate the .desktop with absolute paths (desktop Exec does NOT expand $HOME)
+cat > "$APP_DIR/plauder.desktop" <<EOF
+[Desktop Entry]
+Name=Plauder
+GenericName=Voice Dictation
+Comment=Recording history, logs & settings for voice input
+Exec=$INSTALL_DIR/plauder-gui
+Icon=$INSTALL_DIR/icon.png
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=voice;input;dictation;whisper;transcription;plauder;
+StartupWMClass=Plauder
+EOF
+chmod 644 "$APP_DIR/plauder.desktop"
+# Remove the old broken entry if present
+rm -f "$APP_DIR/plauder-gui.desktop"
+update-desktop-database "$APP_DIR" 2>/dev/null || true
+gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+echo "Launcher entry installed: Plauder"
 
 # Check .env configuration
 source "$INSTALL_DIR/.env" 2>/dev/null || true
@@ -120,9 +166,9 @@ fi
 echo "Creating systemd user service..."
 mkdir -p ~/.config/systemd/user
 
-cat > ~/.config/systemd/user/fluistern.service << EOF
+cat > ~/.config/systemd/user/plauder.service << EOF
 [Unit]
-Description=Flüstern Voice Dictation Daemon
+Description=Plauder Voice Dictation Daemon
 After=graphical-session.target
 
 [Service]
@@ -137,15 +183,15 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-echo "Service created: fluistern.service"
+echo "Service created: plauder.service"
 echo
 
 # Enable and start service
 read -p "Enable and start the daemon now? [Y/n] " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-    systemctl --user enable fluistern.service
-    systemctl --user start fluistern.service
+    systemctl --user enable plauder.service
+    systemctl --user start plauder.service
     echo "Daemon started! Tray icon should appear."
 fi
 
@@ -153,7 +199,7 @@ echo
 echo "=== Installation Complete ==="
 echo
 echo "Installed to: $INSTALL_DIR"
-echo "Command: fluistern (or $BIN_DIR/fluistern)"
+echo "Command: plauder (or $BIN_DIR/plauder)"
 echo
 echo "You can now delete the git clone folder if you want."
 echo
@@ -161,16 +207,16 @@ echo "Next steps:"
 echo
 echo "  1. Right-click the tray icon to configure mic/language"
 echo
-echo "  2. Add a keybinding in your WM/DE config to run: fluistern"
+echo "  2. Add a keybinding in your WM/DE config to run: plauder"
 echo
 echo "     Examples:"
-echo "       sxhkd:     super + r -> fluistern"
-echo "       Hyprland:  bind = SUPER, R, exec, fluistern"
-echo "       i3/sway:   bindsym \$mod+r exec fluistern"
-echo "       dwm:       { MODKEY, XK_r, spawn, SHCMD(\"fluistern\") }"
+echo "       sxhkd:     super + r -> plauder"
+echo "       Hyprland:  bind = SUPER, R, exec, plauder"
+echo "       i3/sway:   bindsym \$mod+r exec plauder"
+echo "       dwm:       { MODKEY, XK_r, spawn, SHCMD(\"plauder\") }"
 echo
 echo "Commands:"
-echo "  Start daemon:  systemctl --user start fluistern"
-echo "  Stop daemon:   systemctl --user stop fluistern"
-echo "  Uninstall:     rm -rf $INSTALL_DIR $BIN_DIR/fluistern"
+echo "  Start daemon:  systemctl --user start plauder"
+echo "  Stop daemon:   systemctl --user stop plauder"
+echo "  Uninstall:     rm -rf $INSTALL_DIR $BIN_DIR/plauder"
 echo

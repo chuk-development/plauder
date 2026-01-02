@@ -1,4 +1,4 @@
-# Flüstern
+# Plauder
 
 > WhisperFlow-style voice dictation for Linux
 
@@ -8,8 +8,8 @@ A lightweight voice-to-text tool that uses Groq's Whisper API for transcription 
 
 - **Fast transcription** using Groq's Whisper Large V3 Turbo
 - **Smart formatting** with automatic punctuation and capitalization
-- **Modern Slint GUI** - Beautiful, fast, cross-platform UI
-- **CPU-optimized** - No more high CPU usage after closing
+- **Modern Tauri + React GUI** - Web UI (React 19 + Tailwind v4) in a native Rust shell
+- **Never swallows text** - truncated LLM output falls back to the full raw transcript
 - **System tray icon** with status indicators
 - **50+ languages** including Hindi, Arabic, Chinese, and more
 - **Microphone selection** via tray menu
@@ -30,22 +30,23 @@ A lightweight voice-to-text tool that uses Groq's Whisper API for transcription 
 
 - Linux with X11 or Wayland
 - PipeWire or PulseAudio
-- Rust/Cargo (for building GUI)
+- Rust/Cargo + Node.js + pnpm (for building the GUI)
+- WebKitGTK 4.1 dev libs (Tauri runtime)
 - Groq API key (free tier available)
 
 ## Installation
 
 ```bash
-git clone https://github.com/chukfinley/fluistern.git
-cd fluistern
+git clone https://github.com/chukfinley/plauder.git
+cd plauder
 ./install.sh
 ```
 
 The installer will:
 1. Check and install dependencies (if needed)
-2. Build the modern Slint GUI (Release mode, optimized)
-3. Copy files to `~/.local/share/fluistern/`
-4. Create `fluistern` command in `~/.local/bin/`
+2. Build the Tauri + React GUI (Release mode, optimized)
+3. Copy files to `~/.local/share/plauder/`
+4. Create `plauder` command in `~/.local/bin/`
 5. Set up systemd service
 6. Prompt for Groq API key
 
@@ -56,7 +57,9 @@ After install, you can delete the cloned folder.
 The installer will check for these:
 
 **Required:**
-- `cargo` / `rust` - Rust toolchain for building GUI
+- `cargo` / `rust` - Rust toolchain (Tauri backend)
+- `node` + `pnpm` - build the React frontend
+- `webkit2gtk-4.1` - Tauri webview runtime
 - `yad` - tray icon
 - `xdotool` - simulating paste
 - `xclip` - clipboard access
@@ -68,12 +71,15 @@ The installer will check for these:
 
 **On Ubuntu/Debian:**
 ```bash
-sudo apt install cargo yad xdotool xclip ffmpeg jq curl pipewire sqlite3
+sudo apt install cargo nodejs yad xdotool xclip ffmpeg jq curl pipewire sqlite3 \
+  libwebkit2gtk-4.1-dev build-essential libssl-dev libayatana-appindicator3-dev librsvg2-dev
+sudo npm install -g pnpm
 ```
 
 **On Arch/Manjaro:**
 ```bash
-sudo pacman -S rust yad xdotool xclip ffmpeg jq curl pipewire sqlite3
+sudo pacman -S rust nodejs pnpm yad xdotool xclip ffmpeg jq curl pipewire sqlite3 \
+  webkit2gtk-4.1 libappindicator-gtk3 librsvg
 ```
 
 ## Configuration
@@ -83,11 +89,11 @@ sudo pacman -S rust yad xdotool xclip ffmpeg jq curl pipewire sqlite3
 1. Go to [console.groq.com/keys](https://console.groq.com/keys)
 2. Create a free account
 3. Generate an API key
-4. The installer will prompt you, or edit `~/.local/share/fluistern/.env`
+4. The installer will prompt you, or edit `~/.local/share/plauder/.env`
 
 ### Config Options
 
-Edit `~/.local/share/fluistern/.env`:
+Edit `~/.local/share/plauder/.env`:
 
 ```bash
 GROQ_API_KEY="your-key"      # Required
@@ -99,18 +105,18 @@ TRAY_ICON="true"              # Show tray icon (true/false)
 
 ### Add Keybinding
 
-Add a keybinding in your WM config to run `fluistern`:
+Add a keybinding in your WM config to run `plauder`:
 
 | WM/DE | Config | Example |
 |-------|--------|---------|
-| sxhkd | `~/.config/sxhkd/sxhkdrc` | `super + r` <br> `    fluistern` |
-| Hyprland | `~/.config/hypr/hyprland.conf` | `bind = SUPER, R, exec, fluistern` |
-| i3/sway | `~/.config/i3/config` | `bindsym $mod+r exec fluistern` |
-| dwm | `config.h` | `{ MODKEY, XK_r, spawn, SHCMD("fluistern") }` |
+| sxhkd | `~/.config/sxhkd/sxhkdrc` | `super + r` <br> `    plauder` |
+| Hyprland | `~/.config/hypr/hyprland.conf` | `bind = SUPER, R, exec, plauder` |
+| i3/sway | `~/.config/i3/config` | `bindsym $mod+r exec plauder` |
+| dwm | `config.h` | `{ MODKEY, XK_r, spawn, SHCMD("plauder") }` |
 
 ## Usage
 
-1. Start the daemon: `systemctl --user start fluistern`
+1. Start the daemon: `systemctl --user start plauder`
 2. Press your keybind to start recording
 3. Speak
 4. Press keybind again to stop and transcribe
@@ -126,17 +132,27 @@ Add a keybinding in your WM config to run `fluistern`:
 
 ### GUI Features
 
-Open the modern Slint-based GUI from the tray menu to access:
-- **📝 Recording History** - View all recordings with expandable cards showing Whisper raw output, LLM formatted output, and correction fields
+Open the Tauri + React GUI from the tray menu to access:
+- **📝 Recording History** - Searchable, expandable cards showing Whisper raw output, LLM formatted output, and an editable correction field
 - **✏️ Corrections** - Teach the system by correcting misheard words
-- **🪲 Debug Logs** - Real-time logs with auto-refresh for troubleshooting
+- **🪲 Debug Logs** - Live-tailing logs for troubleshooting
 - **⚙️ Settings** - Configure API key, language, microphone, system prompt
 
-The GUI features a clean, modern design with:
-- Tabbed interface for easy navigation
-- Expandable recording cards
-- Real-time log monitoring (only refreshes when file changes - CPU optimized!)
-- Professional blue color scheme
+Stack: **Tauri 2 + React 19 + Vite + TypeScript + Tailwind v4**, dark UI by default.
+
+## Development
+
+The GUI is a Tauri 2 app — React/Vite frontend in `src/`, Rust backend in `src-tauri/`.
+
+```bash
+pnpm install          # install frontend deps
+pnpm tauri dev        # hot-reload dev window
+pnpm tauri build      # release binary -> src-tauri/target/release/plauder-gui
+```
+
+The Rust backend exposes commands (`get_recordings`, `save_settings`, …) over Tauri
+IPC; the frontend calls them through `src/lib/api.ts`. Data lives in the same
+`history.db` and `.env` that `voice-input.sh` uses.
 
 ## Supported Languages
 
@@ -156,8 +172,8 @@ Keybind → Stop → Compress to Opus (~30x smaller)
 
 After installation:
 ```
-~/.local/share/fluistern/
-├── fluistern-gui           # Rust GUI binary (settings, history, logs)
+~/.local/share/plauder/
+├── plauder-gui           # Rust GUI binary (settings, history, logs)
 ├── voice-input.sh          # Main toggle script
 ├── voice-input-daemon.sh   # Tray daemon
 ├── select-mic.sh           # Microphone selector
@@ -166,26 +182,26 @@ After installation:
 ├── history.db              # SQLite database for recordings
 └── icons/                  # Tray icons
 
-~/.local/bin/fluistern      # Symlink to run the tool
+~/.local/bin/plauder      # Symlink to run the tool
 ```
 
 ## Commands
 
 ```bash
-fluistern                           # Toggle recording
-systemctl --user start fluistern    # Start daemon
-systemctl --user stop fluistern     # Stop daemon
-systemctl --user status fluistern   # Check status
-journalctl --user -u fluistern -f   # View logs
+plauder                           # Toggle recording
+systemctl --user start plauder    # Start daemon
+systemctl --user stop plauder     # Stop daemon
+systemctl --user status plauder   # Check status
+journalctl --user -u plauder -f   # View logs
 ```
 
 ## Uninstall
 
 ```bash
-systemctl --user stop fluistern
-systemctl --user disable fluistern
-rm -rf ~/.local/share/fluistern ~/.local/bin/fluistern
-rm ~/.config/systemd/user/fluistern.service
+systemctl --user stop plauder
+systemctl --user disable plauder
+rm -rf ~/.local/share/plauder ~/.local/bin/plauder
+rm ~/.config/systemd/user/plauder.service
 ```
 
 ## Troubleshooting

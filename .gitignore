@@ -1,6 +1,12 @@
-# Rust
+# Rust / Tauri
 /target/
-Cargo.lock
+/src-tauri/target/
+/src-tauri/gen/
+
+# Node / Vite
+node_modules/
+/dist/
+*.tsbuildinfo
 
 # Logs
 *.log

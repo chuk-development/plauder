@@ -1,9 +1,11 @@
 [Desktop Entry]
-Name=Flüstern GUI
-Comment=Recording History, Debug Logs & Settings for Voice Input
-Exec=python3 /home/user/git/voice-input/gui.py
-Icon=/home/user/git/voice-input/icons/idle.svg
+Name=Plauder
+GenericName=Voice Dictation
+Comment=Recording history, logs & settings for voice input
+Exec=sh -c "exec $HOME/.local/share/plauder/plauder-gui"
+Icon=plauder
 Terminal=false
 Type=Application
 Categories=AudioVideo;Audio;Utility;
 Keywords=voice;input;dictation;whisper;transcription;
+StartupWMClass=Plauder
