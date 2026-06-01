@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# softprops/action-gh-release needs `contents: write` to create a Release;
+# the default GITHUB_TOKEN is read-only and 403s otherwise.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
