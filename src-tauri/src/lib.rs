@@ -283,8 +283,15 @@ pub fn run() {
                 .items(&[&quit_i])
                 .build()?;
 
+            // Load a dedicated 32x32 tray icon. Using default_window_icon()
+            // panics ("wrong data size") because its raw buffer doesn't match
+            // the size the tray backend expects.
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!(
+                "../icons/32x32.png"
+            ))?;
+
             TrayIconBuilder::with_id("main")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tray_icon)
                 .tooltip("Plauder — Voice Dictation")
                 .menu(&menu)
                 .show_menu_on_left_click(false)

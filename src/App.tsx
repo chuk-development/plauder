@@ -28,10 +28,19 @@ export default function App() {
   }, [refreshAll]);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      refreshHistory().catch(() => {});
-      api.isRecording().then(setRecording).catch(() => {});
-    }, 1000);
+    let busy = false;
+    const id = setInterval(async () => {
+      if (busy) return; // skip if the previous tick is still running
+      busy = true;
+      try {
+        await refreshHistory();
+        setRecording(await api.isRecording());
+      } catch {
+        /* ignore */
+      } finally {
+        busy = false;
+      }
+    }, 1500);
     return () => clearInterval(id);
   }, [refreshHistory]);
 

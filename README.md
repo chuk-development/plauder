@@ -1,40 +1,50 @@
 # Plauder
 
-> WhisperFlow-style voice dictation for Linux
+> WhisperFlow-style voice dictation for Linux — Groq Whisper + LLM formatting, pastes into any focused window.
 
-A lightweight voice-to-text tool that uses Groq's Whisper API for transcription and LLM for formatting. Works with any X11/Wayland window manager.
+[![Build](https://github.com/chukfinley/plauder/actions/workflows/build.yml/badge.svg)](https://github.com/chukfinley/plauder/actions/workflows/build.yml)
+[![Release](https://img.shields.io/github/v/release/chukfinley/plauder)](https://github.com/chukfinley/plauder/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+Press a keybind, speak, press again — the text appears in whatever window has focus. Transcription via Groq's Whisper Large V3 Turbo, optional clean-up via a Groq LLM, history kept locally in SQLite.
+
+```
+[Press shortcut] → Recording…
+[Speak]          "hello world this is a test"
+[Press shortcut] → Processing…
+[Output]         "Hello world, this is a test."
+```
 
 ## Features
 
-- **Fast transcription** using Groq's Whisper Large V3 Turbo
-- **Smart formatting** with automatic punctuation and capitalization
-- **Modern Tauri + React GUI** - Web UI (React 19 + Tailwind v4) in a native Rust shell
-- **Never swallows text** - truncated LLM output falls back to the full raw transcript
-- **System tray icon** with status indicators
-- **50+ languages** including Hindi, Arabic, Chinese, and more
-- **Microphone selection** via tray menu
-- **Keyboard shortcut** toggle (start/stop recording)
-- **Pastes directly** into any focused text field
-- **Recording history** with corrections and timing data
-
-## Demo
-
-```
-[Press shortcut] → Recording...
-[Speak] "hello world this is a test"
-[Press shortcut] → Processing...
-[Output] "Hello world, this is a test."
-```
-
-## Requirements
-
-- Linux with X11 or Wayland
-- PipeWire or PulseAudio
-- Rust/Cargo + Node.js + pnpm (for building the GUI)
-- WebKitGTK 4.1 dev libs (Tauri runtime)
-- Groq API key (free tier available)
+- **Fast transcription** — Whisper Large V3 Turbo on Groq, sub-second for short clips
+- **Clean output** — Groq LLM adds punctuation/casing without rewriting your words
+- **Never swallows text** — truncated or refusal-style LLM output is detected and replaced with the raw transcript
+- **Tiny upload** — opusenc 16 kbps VOIP, ~4 KB per second of audio (~10× smaller than the previous ffmpeg/48k pipeline)
+- **Modern GUI** — Tauri 2 + React 19 + Tailwind v4, dark UI, system tray, lives in `~/.local/share/plauder`
+- **Verlauf tab** — virtualized history list with git-style word diff between Whisper raw and LLM formatted output, character-level change percentage, anomaly badges (refusal / truncated / inflated)
+- **Editable corrections** — teach Plauder by adding "Whisper hears X → I meant Y" pairs; applied to every future LLM call
+- **Live Logs tab** — last 100 lines by default, scroll up to auto-load older
+- **API-key reveal** — Eye/EyeOff toggle in Settings instead of a permanent password field
+- **50+ languages** — auto-detect or pin via the Settings/tray dropdown
+- **Keybind-driven** — works with i3/sway/Hyprland/sxhkd/dwm
 
 ## Installation
+
+### Pre-built `.deb` / `.AppImage`
+
+Every tagged release ships a Debian package and an AppImage on the [Releases page](https://github.com/chukfinley/plauder/releases/latest).
+
+```bash
+# .deb
+sudo apt install ./plauder_*_amd64.deb
+
+# AppImage
+chmod +x plauder_*.AppImage
+./plauder_*.AppImage
+```
+
+### From source
 
 ```bash
 git clone https://github.com/chukfinley/plauder.git
@@ -42,188 +52,161 @@ cd plauder
 ./install.sh
 ```
 
-The installer will:
-1. Check and install dependencies (if needed)
-2. Build the Tauri + React GUI (Release mode, optimized)
-3. Copy files to `~/.local/share/plauder/`
-4. Create `plauder` command in `~/.local/bin/`
-5. Set up systemd service
-6. Prompt for Groq API key
+The installer builds the Tauri + React GUI in release mode, copies everything to `~/.local/share/plauder/`, drops a `plauder` symlink in `~/.local/bin/`, sets up the systemd user service, and prompts for your Groq API key.
 
-After install, you can delete the cloned folder.
+## Requirements
 
-## Dependencies
+- Linux with X11 or Wayland
+- PipeWire or PulseAudio (`pw-record`)
+- Rust/Cargo + Node.js + pnpm (build from source only)
+- WebKitGTK 4.1 dev libs (Tauri runtime)
+- Groq API key — [console.groq.com/keys](https://console.groq.com/keys)
 
-The installer will check for these:
+### System dependencies
 
-**Required:**
-- `cargo` / `rust` - Rust toolchain (Tauri backend)
-- `node` + `pnpm` - build the React frontend
-- `webkit2gtk-4.1` - Tauri webview runtime
-- `yad` - tray icon
-- `xdotool` - simulating paste
-- `xclip` - clipboard access
-- `ffmpeg` - audio compression
-- `jq` - JSON parsing
-- `curl` - API calls
+**Required at runtime:**
+- `yad` — tray icon
+- `xdotool` — paste into focused window
+- `xclip` — clipboard
+- `opusenc` (recommended) or `ffmpeg` — audio compression
+- `jq` `curl` `sqlite3`
 - `pw-record` (PipeWire)
-- `sqlite3` - database for recording history
 
-**On Ubuntu/Debian:**
+**Ubuntu/Debian:**
 ```bash
-sudo apt install cargo nodejs yad xdotool xclip ffmpeg jq curl pipewire sqlite3 \
+sudo apt install yad xdotool xclip opus-tools ffmpeg jq curl pipewire sqlite3 \
   libwebkit2gtk-4.1-dev build-essential libssl-dev libayatana-appindicator3-dev librsvg2-dev
-sudo npm install -g pnpm
+# build-from-source extras:
+sudo apt install cargo nodejs && sudo npm install -g pnpm
 ```
 
-**On Arch/Manjaro:**
+**Arch/Manjaro:**
 ```bash
-sudo pacman -S rust nodejs pnpm yad xdotool xclip ffmpeg jq curl pipewire sqlite3 \
+sudo pacman -S yad xdotool xclip opus-tools ffmpeg jq curl pipewire sqlite3 \
   webkit2gtk-4.1 libappindicator-gtk3 librsvg
+# build-from-source extras:
+sudo pacman -S rust nodejs pnpm
 ```
 
 ## Configuration
 
-### Get Groq API Key
-
-1. Go to [console.groq.com/keys](https://console.groq.com/keys)
-2. Create a free account
-3. Generate an API key
-4. The installer will prompt you, or edit `~/.local/share/plauder/.env`
-
-### Config Options
-
-Edit `~/.local/share/plauder/.env`:
+Edit `~/.local/share/plauder/.env` or use the **Settings** tab in the GUI:
 
 ```bash
-GROQ_API_KEY="your-key"      # Required
-LANGUAGE="de"                 # Optional: en, de, es, fr, hi, etc.
-MIC_SOURCE=""                 # Optional: specific mic (use tray menu to select)
-NOTIFICATIONS="true"          # Show notifications (true/false)
-TRAY_ICON="true"              # Show tray icon (true/false)
+GROQ_API_KEY="gsk_…"     # Required
+LANGUAGE="de"            # Optional: auto-detect if empty
+MIC_SOURCE=""            # Optional: device id from `pactl list sources short`
+NOTIFICATIONS="true"
+TRAY_ICON="true"
+SYSTEM_PROMPT="…"        # Optional: override the LLM clean-up prompt
 ```
 
-### Add Keybinding
+### Keybindings
 
-Add a keybinding in your WM config to run `plauder`:
+Bind your WM/DE to run `plauder`:
 
-| WM/DE | Config | Example |
-|-------|--------|---------|
-| sxhkd | `~/.config/sxhkd/sxhkdrc` | `super + r` <br> `    plauder` |
-| Hyprland | `~/.config/hypr/hyprland.conf` | `bind = SUPER, R, exec, plauder` |
-| i3/sway | `~/.config/i3/config` | `bindsym $mod+r exec plauder` |
-| dwm | `config.h` | `{ MODKEY, XK_r, spawn, SHCMD("plauder") }` |
+| WM/DE     | Config                          | Example                                                    |
+|-----------|----------------------------------|------------------------------------------------------------|
+| i3 / sway | `~/.config/i3/config`            | `bindsym $mod+r exec plauder`                              |
+| Regolith  | `~/.config/regolith3/i3/config.d/91_custom` | `bindsym $mod+r exec plauder`                   |
+| Hyprland  | `~/.config/hypr/hyprland.conf`   | `bind = SUPER, R, exec, plauder`                           |
+| sxhkd     | `~/.config/sxhkd/sxhkdrc`        | `super + r` <br> `    plauder`                             |
+| dwm       | `config.h`                       | `{ MODKEY, XK_r, spawn, SHCMD("plauder") }`                |
 
 ## Usage
 
-1. Start the daemon: `systemctl --user start plauder`
-2. Press your keybind to start recording
+1. `systemctl --user start plauder` (tray daemon)
+2. Press your keybind → recording
 3. Speak
-4. Press keybind again to stop and transcribe
-5. Text appears in your focused window
+4. Press keybind again → transcribe + paste
 
-### Tray Menu (right-click)
+### GUI tabs
 
-- **Toggle Recording** - Start/stop recording
-- **Einstellungen & Historie** - Open GUI for settings, logs, and recording history
-- **Select Microphone** - Choose input device
-- **Select Language** - Set transcription language (50+ languages)
-- **Quit** - Stop the daemon
+- **Verlauf** — every recording, expandable card with Whisper raw / LLM formatted / your correction, git-style word diff, anomaly badges, % changed, copy/delete
+- **Korrekturen** — add and edit "Whisper hears X → I meant Y" rules used by every future LLM call
+- **Logs** — live debug log, last 100 lines, scroll up for older
+- **Einstellungen** — API key (with show/hide), mic, language, notifications, tray, system prompt
 
-### GUI Features
+### Tray menu
 
-Open the Tauri + React GUI from the tray menu to access:
-- **📝 Recording History** - Searchable, expandable cards showing Whisper raw output, LLM formatted output, and an editable correction field
-- **✏️ Corrections** - Teach the system by correcting misheard words
-- **🪲 Debug Logs** - Live-tailing logs for troubleshooting
-- **⚙️ Settings** - Configure API key, language, microphone, system prompt
+- Toggle Recording
+- Einstellungen & Historie (opens GUI)
+- Select Microphone
+- Select Language
+- Quit
 
-Stack: **Tauri 2 + React 19 + Vite + TypeScript + Tailwind v4**, dark UI by default.
+## How it works
+
+```
+Keybind → pw-record 16 kHz mono WAV → /tmp
+Keybind → opusenc 16 kbps VOIP (~16 ms encode, ~4 KB/s upload)
+        → POST /audio/transcriptions  (Whisper Large V3 Turbo)
+        → POST /chat/completions      (gpt-oss-20b, low reasoning effort)
+        → xdotool pastes into the focused window
+        → SQLite history.db gets the row + timings
+```
+
+**Anti-swallow** safeguard: if the LLM finishes with `finish_reason=length`, returns less than 60 % of the input, or matches one of the known refusal patterns ("kann ich nicht", "I cannot", "as an AI", …), Plauder pastes the raw Whisper transcript instead.
+
+## Files after install
+
+```
+~/.local/share/plauder/
+├── plauder-gui              # Tauri release binary
+├── voice-input.sh           # toggle script (recording + transcribe + paste)
+├── voice-input-daemon.sh    # tray daemon
+├── select-mic.sh / select-language.sh
+├── .env                     # config (API key, language, mic)
+├── history.db               # SQLite history + corrections
+└── icons/                   # tray + window icons
+
+~/.local/bin/plauder         # symlink → voice-input.sh
+~/.config/systemd/user/plauder.service
+```
 
 ## Development
 
-The GUI is a Tauri 2 app — React/Vite frontend in `src/`, Rust backend in `src-tauri/`.
+Tauri 2 app: React/Vite frontend in `src/`, Rust backend in `src-tauri/`.
 
 ```bash
-pnpm install          # install frontend deps
-pnpm tauri dev        # hot-reload dev window
-pnpm tauri build      # release binary -> src-tauri/target/release/plauder-gui
+pnpm install
+pnpm tauri dev                            # hot-reload
+pnpm tauri build --no-bundle              # binary → src-tauri/target/release/plauder-gui
+pnpm tauri build                          # full .deb + .rpm + AppImage bundle
 ```
 
-The Rust backend exposes commands (`get_recordings`, `save_settings`, …) over Tauri
-IPC; the frontend calls them through `src/lib/api.ts`. Data lives in the same
-`history.db` and `.env` that `voice-input.sh` uses.
+Data lives in the same `history.db` and `.env` the shell scripts use, so the GUI and CLI stay in sync.
 
-## Supported Languages
+## Releases
 
-Auto-detect, English, German, Spanish, French, Hindi, Italian, Portuguese, Dutch, Polish, Russian, Chinese, Japanese, Korean, Arabic, Turkish, Vietnamese, Thai, Indonesian, Ukrainian, Czech, Greek, Hebrew, Hungarian, Swedish, Danish, Finnish, Norwegian, Romanian, Bengali, Tamil, Telugu, Urdu, Persian, and many more.
-
-## How It Works
-
-```
-Keybind → Start recording (16kHz mono WAV)
-Keybind → Stop → Compress to Opus (~30x smaller)
-       → Upload to Groq Whisper API
-       → Format with Groq LLM (punctuation, caps)
-       → Pastes into focused window (Ctrl+V)
-```
-
-## Files
-
-After installation:
-```
-~/.local/share/plauder/
-├── plauder-gui           # Rust GUI binary (settings, history, logs)
-├── voice-input.sh          # Main toggle script
-├── voice-input-daemon.sh   # Tray daemon
-├── select-mic.sh           # Microphone selector
-├── select-language.sh      # Language selector
-├── .env                    # Your config (API key, language, mic)
-├── history.db              # SQLite database for recordings
-└── icons/                  # Tray icons
-
-~/.local/bin/plauder      # Symlink to run the tool
-```
-
-## Commands
+Push a `vX.Y.Z` tag and the GitHub Action builds `.deb`, `.rpm`, and `.AppImage` and attaches them to a new release automatically.
 
 ```bash
-plauder                           # Toggle recording
-systemctl --user start plauder    # Start daemon
-systemctl --user stop plauder     # Stop daemon
-systemctl --user status plauder   # Check status
-journalctl --user -u plauder -f   # View logs
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 ## Uninstall
 
 ```bash
-systemctl --user stop plauder
-systemctl --user disable plauder
+systemctl --user stop plauder && systemctl --user disable plauder
 rm -rf ~/.local/share/plauder ~/.local/bin/plauder
 rm ~/.config/systemd/user/plauder.service
 ```
 
 ## Troubleshooting
 
-### No tray icon
-- Install `yad`: `sudo pacman -S yad`
-- Make sure you have a system tray
-
-### Transcription errors
-- Set specific language in tray menu (auto-detect can miss)
-- Speak clearly, reduce background noise
-- Check microphone selection
-
-### Slow processing
-- Mostly upload time to Groq API
-- Keep recordings under 30 seconds for <5s processing
+- **No tray icon** — install `yad`, make sure your DE has a system tray
+- **Empty / wrong transcript** — pin the language in Settings (auto-detect can miss for short clips)
+- **Slow** — mostly Groq upload + LLM round-trip; with opusenc 16 kbps a 10 s clip uploads in < 200 ms on WiFi
+- **Tray panic on launch** — make sure `~/.local/share/plauder/icons/32x32.png` exists; the binary loads it via `include_bytes!` at build time
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
 
 ## Credits
 
-- [Groq](https://groq.com) - Fast Whisper API
-- [OpenAI Whisper](https://github.com/openai/whisper) - Speech recognition model
+- [Groq](https://groq.com) — fast Whisper + LLM inference
+- [OpenAI Whisper](https://github.com/openai/whisper) — transcription model
+- [Tauri](https://tauri.app) — Rust + WebView shell

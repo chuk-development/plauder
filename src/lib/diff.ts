@@ -71,6 +71,40 @@ const REFUSAL_PATTERNS = [
   "was möchtest du",
 ];
 
+/** Cheap change estimate (0-100 %) for the list badge — does NOT run the
+ *  O(n*m) word diff, so it stays fast across hundreds of rows on every refresh.
+ *
+ *  Character-multiset Jaccard distance: captures case changes, punctuation,
+ *  whitespace, and additions/removals. The previous word-only version reported
+ *  0 % whenever the LLM only re-cased words or added punctuation. */
+export function diffPercent(a: string, b: string): number {
+  if (a === b) return 0;
+  const al = a.length;
+  const bl = b.length;
+  if (al === 0 && bl === 0) return 0;
+  if (al === 0 || bl === 0) return 100;
+
+  const ca = new Map<string, number>();
+  const cb = new Map<string, number>();
+  for (const ch of a) ca.set(ch, (ca.get(ch) ?? 0) + 1);
+  for (const ch of b) cb.set(ch, (cb.get(ch) ?? 0) + 1);
+
+  let common = 0;
+  let total = 0;
+  const keys = new Set<string>([...ca.keys(), ...cb.keys()]);
+  for (const k of keys) {
+    const x = ca.get(k) ?? 0;
+    const y = cb.get(k) ?? 0;
+    common += Math.min(x, y);
+    total += Math.max(x, y);
+  }
+  if (total === 0) return 0;
+  // Floor at 1 % whenever the two strings are not byte-identical, so that
+  // any visible change shows up in the badge instead of rounding to 0.
+  const pct = (1 - common / total) * 100;
+  return pct > 0 && pct < 1 ? 1 : Math.round(pct);
+}
+
 export type AnomalyKind = "refusal" | "truncated" | "inflated" | null;
 
 export function detectAnomaly(

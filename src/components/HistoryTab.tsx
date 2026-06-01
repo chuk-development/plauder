@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ChevronRight,
   Check,
@@ -17,7 +17,7 @@ import {
 import { type Recording } from "@/lib/api";
 import { useStore } from "@/store";
 import { cn } from "@/lib/utils";
-import { wordDiff, detectAnomaly, anomalyLabel } from "@/lib/diff";
+import { wordDiff, diffPercent, detectAnomaly, anomalyLabel } from "@/lib/diff";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,11 +75,11 @@ function CopyButton({ text }: { text: string }) {
 function DiffView({ whisper, llm }: { whisper: string; llm: string }) {
   const tokens = useMemo(() => wordDiff(whisper, llm), [whisper, llm]);
   return (
-    <p className="whitespace-pre-wrap break-words rounded-lg bg-background/50 p-2.5 text-xs leading-relaxed select-text">
+    <p className="whitespace-pre-wrap break-words rounded-lg bg-background/50 p-3 text-[13px] leading-[1.9] select-text">
       {tokens.map((t, i) => {
         if (t.op === "equal")
           return (
-            <span key={i} className="text-foreground/60">
+            <span key={i} className="text-foreground/80">
               {t.text}
             </span>
           );
@@ -87,13 +87,16 @@ function DiffView({ whisper, llm }: { whisper: string; llm: string }) {
           return (
             <span
               key={i}
-              className="rounded bg-destructive/20 text-destructive/90 line-through decoration-destructive/50"
+              className="rounded bg-destructive/15 px-0.5 text-destructive/80 line-through decoration-destructive/40"
             >
               {t.text}
             </span>
           );
         return (
-          <span key={i} className="rounded bg-primary/20 text-primary">
+          <span
+            key={i}
+            className="rounded bg-primary/20 px-0.5 font-medium text-primary"
+          >
             {t.text}
           </span>
         );
@@ -104,7 +107,7 @@ function DiffView({ whisper, llm }: { whisper: string; llm: string }) {
 
 function RecordingCard({ rec }: { rec: Recording }) {
   const [expanded, setExpanded] = useState(false);
-  const [showDiff, setShowDiff] = useState(false);
+  const [showDiff, setShowDiff] = useState(true);
   const saveCorrection = useStore((s) => s.saveCorrection);
   const deleteRecording = useStore((s) => s.deleteRecording);
   const text = rec.llmOutput || rec.whisperOutput || "";
@@ -115,6 +118,11 @@ function RecordingCard({ rec }: { rec: Recording }) {
     [rec.whisperOutput, rec.llmOutput]
   );
   const canDiff = !!(rec.whisperOutput && rec.llmOutput);
+  const pct = useMemo(
+    () =>
+      canDiff ? diffPercent(rec.whisperOutput!, rec.llmOutput!) : 0,
+    [canDiff, rec.whisperOutput, rec.llmOutput]
+  );
 
   return (
     <div
@@ -152,6 +160,23 @@ function RecordingCard({ rec }: { rec: Recording }) {
                 <>
                   <span className="text-muted-foreground/40">·</span>
                   <span>{wordCount(text)} Wörter</span>
+                </>
+              )}
+              {canDiff && (
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span
+                    className={cn(
+                      pct === 0
+                        ? "text-muted-foreground"
+                        : pct < 25
+                        ? "text-primary"
+                        : "text-amber-500"
+                    )}
+                    title="Anteil, den das LLM gegenüber Whisper geändert hat"
+                  >
+                    {pct}% geändert
+                  </span>
                 </>
               )}
               {anomaly && (
@@ -225,7 +250,7 @@ function RecordingCard({ rec }: { rec: Recording }) {
           </Field>
 
           {showDiff && canDiff ? (
-            <Field label="Änderungen (Whisper → Formatiert)">
+            <Field label={`Änderungen (Whisper → Formatiert) · ${pct}% geändert`}>
               <DiffView whisper={rec.whisperOutput!} llm={rec.llmOutput!} />
               <div className="mt-1 flex gap-3 text-[10px] text-muted-foreground">
                 <span className="inline-flex items-center gap-1">
@@ -340,10 +365,13 @@ function StatPill({
   );
 }
 
+const PAGE = 25;
+
 export function HistoryTab() {
   const recordings = useStore((s) => s.recordings);
   const [query, setQuery] = useState("");
   const [onlyAnomalies, setOnlyAnomalies] = useState(false);
+  const [limit, setLimit] = useState(PAGE);
 
   const stats = useMemo(() => {
     const total = recordings.length;
@@ -376,6 +404,18 @@ export function HistoryTab() {
       list = list.filter((r) => detectAnomaly(r.whisperOutput, r.llmOutput));
     return list;
   }, [recordings, query, onlyAnomalies]);
+
+  // Reset paging when the filter/search changes.
+  useEffect(() => setLimit(PAGE), [query, onlyAnomalies]);
+
+  const visible = filtered.slice(0, limit);
+
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 300) {
+      setLimit((l) => (l < filtered.length ? l + PAGE : l));
+    }
+  };
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -422,14 +462,23 @@ export function HistoryTab() {
         )}
       </div>
 
-      <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+      <div className="flex-1 space-y-2 overflow-y-auto pr-1" onScroll={onScroll}>
         {filtered.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
             <Mic className="size-8 opacity-20" />
             {recordings.length === 0 ? "Noch keine Aufnahmen" : "Keine Treffer"}
           </div>
         ) : (
-          filtered.map((rec) => <RecordingCard key={rec.id} rec={rec} />)
+          <>
+            {visible.map((rec) => (
+              <RecordingCard key={rec.id} rec={rec} />
+            ))}
+            {limit < filtered.length && (
+              <div className="py-2 text-center text-xs text-muted-foreground">
+                {filtered.length - limit} weitere — scrollen zum Laden
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

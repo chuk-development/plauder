@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RotateCcw, Save, RefreshCw } from "lucide-react";
+import { RotateCcw, Save, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { api, type MicSource, type Settings } from "@/lib/api";
 import { useStore } from "@/store";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ export function SettingsTab() {
   const [draft, setDraft] = useState<Settings | null>(settings);
   const [saved, setSaved] = useState(false);
   const [mics, setMics] = useState<MicSource[]>([]);
+  const [showKey, setShowKey] = useState(false);
 
   useEffect(() => setDraft(settings), [settings]);
 
@@ -65,13 +66,25 @@ export function SettingsTab() {
         <Section title="API">
           <div className="space-y-1.5">
             <Label htmlFor="api">Groq API-Key</Label>
-            <Input
-              id="api"
-              type="password"
-              placeholder="gsk_…"
-              value={draft.apiKey}
-              onChange={(e) => update("apiKey", e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                id="api"
+                type={showKey ? "text" : "password"}
+                placeholder="gsk_…"
+                value={draft.apiKey}
+                onChange={(e) => update("apiKey", e.target.value)}
+                className="pr-10 font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey((v) => !v)}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-muted-foreground hover:text-foreground"
+                aria-label={showKey ? "Key verbergen" : "Key zeigen"}
+                title={showKey ? "Key verbergen" : "Key zeigen"}
+              >
+                {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
           </div>
         </Section>
 
@@ -89,7 +102,7 @@ export function SettingsTab() {
               id="mic"
               value={draft.micSource}
               onChange={(e) => update("micSource", e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex h-9 w-full rounded-md border border-input bg-card text-foreground px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {mics.map((m) => (
                 <option key={m.id || "default"} value={m.id} className="bg-popover">
@@ -109,7 +122,7 @@ export function SettingsTab() {
               id="lang"
               value={draft.language}
               onChange={(e) => update("language", e.target.value)}
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex h-9 w-full rounded-md border border-input bg-card text-foreground px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {LANGUAGES.map((l) => (
                 <option key={l.code || "auto"} value={l.code} className="bg-popover">

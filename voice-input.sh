@@ -163,9 +163,33 @@ notify() {
     fi
 }
 
-# Function to compress audio to opus/ogg (small but good quality)
+# Compress to opus/ogg — small upload, good speech quality.
+# Strategy:
+#   * Prefer `opusenc` (opus-tools) — single dedicated binary, no ffmpeg
+#     startup cost (~150-300 ms saved per recording).
+#   * VOIP mode + 16 kbps is plenty for 16 kHz mono speech without hurting
+#     Whisper accuracy, and roughly 3× smaller than the old 48 kbps file →
+#     faster upload to Groq.
+#   * Fallback to ffmpeg if opusenc isn't installed.
 compress_audio() {
-    ffmpeg -y -i "$AUDIO_FILE" -ar 16000 -ac 1 -c:a libopus -b:a 48k "$AUDIO_COMPRESSED" 2>/dev/null
+    if command -v opusenc >/dev/null 2>&1; then
+        opusenc \
+            --quiet \
+            --bitrate 16 \
+            --vbr \
+            --framesize 60 \
+            --comp 0 \
+            --downmix-mono \
+            "$AUDIO_FILE" "$AUDIO_COMPRESSED"
+    else
+        ffmpeg -y -hide_banner -loglevel error \
+            -i "$AUDIO_FILE" \
+            -ar 16000 -ac 1 \
+            -c:a libopus -application voip -b:a 16k -vbr on \
+            -frame_duration 60 -compression_level 0 \
+            -threads 0 \
+            "$AUDIO_COMPRESSED" 2>/dev/null
+    fi
 }
 
 # Temp files for timing (subshell workaround)

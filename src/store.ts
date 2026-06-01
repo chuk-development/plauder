@@ -50,6 +50,18 @@ export const useStore = create<AppState>((set, get) => ({
       api.getRecordings(),
       api.getCorrections(),
     ]);
+    // Only replace state if something actually changed, so the live poll
+    // doesn't trigger a full re-render (and diff recompute) every second.
+    const prev = get();
+    const sameRec =
+      prev.recordings.length === recordings.length &&
+      prev.recordings[0]?.id === recordings[0]?.id &&
+      prev.recordings[0]?.llmOutput === recordings[0]?.llmOutput &&
+      prev.recordings[0]?.userCorrection === recordings[0]?.userCorrection;
+    const sameCorr =
+      prev.corrections.length === corrections.length &&
+      prev.corrections[0]?.id === corrections[0]?.id;
+    if (sameRec && sameCorr) return;
     set({ recordings, corrections });
   },
 
