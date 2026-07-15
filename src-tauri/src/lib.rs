@@ -52,6 +52,8 @@ pub struct Settings {
     pub notifications: bool,
     pub tray_icon: bool,
     pub system_prompt: String,
+    pub vocabulary: String,
+    pub llm_model: String,
 }
 
 // ---- Commands ----
@@ -169,6 +171,12 @@ fn get_settings() -> Settings {
             .get("SYSTEM_PROMPT")
             .unwrap_or(EnvConfig::get_default_system_prompt())
             .to_string(),
+        vocabulary: cfg.get("VOCABULARY").unwrap_or("").to_string(),
+        llm_model: cfg
+            .get("LLM_MODEL")
+            .filter(|m| !m.trim().is_empty())
+            .unwrap_or(EnvConfig::get_default_llm_model())
+            .to_string(),
     }
 }
 
@@ -187,6 +195,8 @@ fn save_settings(settings: Settings) -> Result<(), String> {
         if settings.tray_icon { "true" } else { "false" }.into(),
     );
     cfg.set("SYSTEM_PROMPT".into(), settings.system_prompt);
+    cfg.set("VOCABULARY".into(), settings.vocabulary);
+    cfg.set("LLM_MODEL".into(), settings.llm_model);
     cfg.save().map_err(|e| e.to_string())
 }
 

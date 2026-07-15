@@ -138,6 +138,34 @@ export function SettingsTab() {
           </div>
         </Section>
 
+        <Section title="Vokabular">
+          <div className="space-y-1.5">
+            <Label htmlFor="vocab">Eigene Begriffe</Label>
+            <Textarea
+              id="vocab"
+              value={draft.vocabulary}
+              onChange={(e) => update("vocabulary", e.target.value)}
+              placeholder="Higgsfield, Claude Code, Flutter, Subagent, …"
+              className="min-h-[70px] font-mono text-[11px] leading-relaxed"
+            />
+            <p className="text-xs text-muted-foreground">
+              Namen und Fachbegriffe, die Whisper verhaut — kommagetrennt. Gehen direkt an die
+              Erkennung, nicht erst an die Nachbearbeitung. Weitere Begriffe lernt Plauder
+              selbst aus dem Verlauf dazu.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="model">Modell für die Nachbearbeitung</Label>
+            <Input
+              id="model"
+              value={draft.llmModel}
+              onChange={(e) => update("llmModel", e.target.value)}
+              placeholder="openai/gpt-oss-120b"
+              className="font-mono text-xs"
+            />
+          </div>
+        </Section>
+
         <Section title="Oberfläche">
           <Toggle
             label="Benachrichtigungen"

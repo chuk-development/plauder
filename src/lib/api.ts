@@ -28,6 +28,8 @@ export interface Settings {
   notifications: boolean;
   trayIcon: boolean;
   systemPrompt: string;
+  vocabulary: string;
+  llmModel: string;
 }
 
 export const api = {

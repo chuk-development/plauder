@@ -18,20 +18,22 @@ Press a keybind, speak, press again — the text appears in whatever window has 
 
 ```
 [Press shortcut] → Recording…
-[Speak]          "hello world this is a test"
+[Speak]          "das meeting ist um fünf uhr ähm nee doch nicht um fünf um sieben"
 [Press shortcut] → Processing…
-[Output]         "Hello world, this is a test."
+[Output]         "Das Meeting ist um sieben Uhr."
 ```
 
 ## Features
 
 - **Fast transcription** — Whisper Large V3 Turbo on Groq, sub-second for short clips
-- **Clean output** — Groq LLM adds punctuation/casing without rewriting your words
+- **Writes what you meant** — resolves mid-sentence self-corrections ("um fünf, nee, um sieben"), drops filler and stutters, keeps your slang and your language
+- **Learns your vocabulary** — mines your own history in the background for the names it keeps mangling ("SAP-Agenten" → "Subagenten") and feeds them back into the recogniser. A term must be proposed by several independent runs before it goes live, so guesses never reach your text
 - **Never swallows text** — truncated or refusal-style LLM output is detected and replaced with the raw transcript
 - **Tiny upload** — opusenc 16 kbps VOIP, ~4 KB per second of audio (~10× smaller than the previous ffmpeg/48k pipeline)
 - **Modern GUI** — Tauri 2 + React 19 + Tailwind v4, dark UI, system tray, lives in `~/.local/share/plauder`
 - **Verlauf tab** — virtualized history list with git-style word diff between Whisper raw and LLM formatted output, character-level change percentage, anomaly badges (refusal / truncated / inflated)
-- **Editable corrections** — teach Plauder by adding "Whisper hears X → I meant Y" pairs; applied to every future LLM call
+- **Editable corrections** — teach Plauder by adding "Whisper hears X → I meant Y" pairs; applied by meaning, so `Cloud → Claude` fixes "yo Cloud, guck dir die Logs an" without touching "läuft in der Cloud"
+- **Pinned vocabulary** — your names and jargon in Settings, sent to Whisper as a decoding hint rather than patched up afterwards
 - **Live Logs tab** — last 100 lines by default, scroll up to auto-load older
 - **API-key reveal** — Eye/EyeOff toggle in Settings instead of a permanent password field
 - **50+ languages** — auto-detect or pin via the Settings/tray dropdown
@@ -148,13 +150,27 @@ Bind your WM/DE to run `plauder`:
 ```
 Keybind → pw-record 16 kHz mono WAV → /tmp
 Keybind → opusenc 16 kbps VOIP (~16 ms encode, ~4 KB/s upload)
-        → POST /audio/transcriptions  (Whisper Large V3 Turbo)
-        → POST /chat/completions      (gpt-oss-20b, low reasoning effort)
+        → POST /audio/transcriptions  (Whisper Large V3 Turbo + vocabulary prompt)
+        → POST /chat/completions      (gpt-oss-120b, medium reasoning effort)
         → xdotool pastes into the focused window
         → SQLite history.db gets the row + timings
+        → detached: the learner mines the history for new vocabulary
 ```
 
-**Anti-swallow** safeguard: if the LLM finishes with `finish_reason=length`, returns less than 60 % of the input, or matches one of the known refusal patterns ("kann ich nicht", "I cannot", "as an AI", …), Plauder pastes the raw Whisper transcript instead.
+**Anti-swallow** safeguard: if the LLM finishes with `finish_reason=length`, returns less than 40 % of the input, or matches one of the known refusal patterns ("kann ich nicht", "I cannot", "as an AI", …), Plauder pastes the raw Whisper transcript instead. The threshold is 40 % rather than 60 % because removing filler legitimately shrinks a rambling passage by a third.
+
+### The learning loop
+
+Whisper accepts a `prompt` — text prepended as decoding context. It is a bias, not a rule, but it is enough to stop "Playwright" coming back as "Play-Red". Plauder fills it with your vocabulary, so mishearings get fixed at the source instead of being patched afterwards.
+
+That list grows on its own. After a recording (detached, never in the dictation path, at most every `LEARN_INTERVAL_MIN`), a model reads your recent history and proposes terms — using your hand-edits as ground truth, then the repairs the formatter already made, then recurring jargon.
+
+Left unchecked this loop is dangerous in two ways, and both are guarded:
+
+- **It learns its own errors.** The history is full of mishearings nobody fixed, so "Hix Field" looks like a frequent proper noun. Feeding that back would teach Whisper to make the mistake forever. The learner is required to output the *correction*, and a term is only accepted if the term itself or one of its claimed mishearings actually occurs in your transcripts.
+- **It guesses.** Faced with a garble it doesn't recognise, the model invents a plausible fix — "Hix Field" became Hugging Face one run and Higgsfield the next; "Cal AI" (a real app) became Claude. Asking a second model to review the claims proved useless: it rejected "Peison → Python" as "sounds different". What works is the model's own inconsistency — guesses land somewhere new every run, real mishearings come back every time. So a term must be proposed by `LEARN_CONFIRMATIONS` independent runs before it goes live.
+
+Inspect it with `voice-input.sh --learn` (run now, print the table) or `--vocabulary` (show the hint the next recording will use). `voice-input.sh --format "text"` runs the formatting stage on text, for tuning the prompt without a microphone.
 
 ## Files after install
 
