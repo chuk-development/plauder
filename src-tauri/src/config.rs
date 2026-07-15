@@ -46,6 +46,15 @@ IS the cleaned text — no preamble, no comment, no markdown, no quotes around i
    Output: Um 7 Uhr möchte ich ins Bett gehen.
    WRONG:  "Um 5 Uhr möchte ich ins Bett gehen, doch erst um 7 Uhr." ← not resolved
 
+   It may even arrive as its own sentence, after a full stop. Same thing: apply it
+   to what it corrects and delete it. Already-clean punctuation around it means
+   nothing — the transcript can be perfectly punctuated and still not say what the
+   speaker meant.
+   Input:  okay stell den wecker auf 5 uhr ich möchte aufstehen dann. ne doch stell es auf 7 uhr
+   Output: Okay, stell den Wecker auf 7 Uhr, ich möchte dann aufstehen.
+   WRONG:  "Okay, stell den Wecker auf 5 Uhr, ich möchte aufstehen dann. Ne, doch,
+            stell es auf 7 Uhr." ← input echoed back, repair not applied
+
    Correct ONLY the value the repair actually targets. Identical values elsewhere in
    the sentence are untouched — the speaker corrected one of them, not all of them:
    Input:  stell den wecker auf 5 uhr und um 5 uhr geh ich ins bett ne doch erst um 7
