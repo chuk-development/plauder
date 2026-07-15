@@ -14,7 +14,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"/></a>
 </p>
 
-Press a keybind, speak, press again — the text appears in whatever window has focus. Transcription via Groq's Whisper Large V3 Turbo, optional clean-up via a Groq LLM, history kept locally in SQLite.
+Press a keybind, speak, press again — the text appears in whatever window has focus. Transcription via Groq's Whisper Large V3, optional clean-up via a Groq LLM, history kept locally in SQLite.
 
 ```
 [Press shortcut] → Recording…
@@ -25,7 +25,7 @@ Press a keybind, speak, press again — the text appears in whatever window has 
 
 ## Features
 
-- **Fast transcription** — Whisper Large V3 Turbo on Groq, sub-second for short clips
+- **Fast transcription** — Whisper Large V3 on Groq, sub-second for short clips
 - **Writes what you meant** — resolves mid-sentence self-corrections ("um fünf, nee, um sieben"), drops filler and stutters, keeps your slang and your language
 - **Learns your vocabulary** — mines your own history in the background for the names it keeps mangling ("SAP-Agenten" → "Subagenten") and feeds them back into the recogniser. A term must be proposed by several independent runs before it goes live, so guesses never reach your text
 - **Never swallows text** — truncated or refusal-style LLM output is detected and replaced with the raw transcript
@@ -108,6 +108,8 @@ LANGUAGE="de"            # Optional: auto-detect if empty
 MIC_SOURCE=""            # Optional: device id from `pactl list sources short`
 NOTIFICATIONS="true"
 TRAY_ICON="true"
+VOCABULARY="…"           # Optional: your names/jargon, comma-separated
+WHISPER_MODEL="whisper-large-v3"
 SYSTEM_PROMPT="…"        # Optional: override the LLM clean-up prompt
 ```
 
@@ -150,7 +152,7 @@ Bind your WM/DE to run `plauder`:
 ```
 Keybind → pw-record 16 kHz mono WAV → /tmp
 Keybind → opusenc 16 kbps VOIP (~16 ms encode, ~4 KB/s upload)
-        → POST /audio/transcriptions  (Whisper Large V3 Turbo + vocabulary prompt)
+        → POST /audio/transcriptions  (Whisper Large V3 + vocabulary prompt)
         → POST /chat/completions      (gpt-oss-120b, medium reasoning effort)
         → xdotool pastes into the focused window
         → SQLite history.db gets the row + timings
@@ -162,6 +164,16 @@ Keybind → opusenc 16 kbps VOIP (~16 ms encode, ~4 KB/s upload)
 ### The learning loop
 
 Whisper accepts a `prompt` — text prepended as decoding context. It is a bias, not a rule, but it is enough to stop "Playwright" coming back as "Play-Red". Plauder fills it with your vocabulary, so mishearings get fixed at the source instead of being patched afterwards.
+
+The prompt has to read like speech. Whisper was trained to continue running text and copies the register it is primed with, so a bare word list actively makes things worse. Measured on one clip of "Yo Claude, guck dir bitte die Logs an":
+
+| prompt | transcript |
+|---|---|
+| none | `Klart, guck dir die Loks an.` |
+| word list | `Claude, Cucke Dilox an` — name saved, sentence wrecked |
+| sentence | `Klaude, guck dir die Logs an.` — sentence intact |
+
+So the terms ride inside a carrier sentence. That sentence is deliberately dull and unrelated to any real request, because a prompt can leak into the transcript of a near-silent clip — better it leaks something obviously wrong than a plausible instruction.
 
 That list grows on its own. After a recording (detached, never in the dictation path, at most every `LEARN_INTERVAL_MIN`), a model reads your recent history and proposes terms — using your hand-edits as ground truth, then the repairs the formatter already made, then recurring jargon.
 

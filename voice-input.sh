@@ -30,6 +30,12 @@ NOTIFICATIONS="${NOTIFICATIONS:-true}"
 # next to the recording itself.
 LLM_MODEL="${LLM_MODEL:-openai/gpt-oss-120b}"
 
+# Transcription model. Turbo is the distilled decoder — it saves its time exactly
+# where proper nouns and accents get decided, and on this speaker it turned
+# "Man bräuchte" into "Wäre ich da". The full model costs ~130 ms more on Groq,
+# which nobody notices next to pressing a key and talking.
+WHISPER_MODEL="${WHISPER_MODEL:-whisper-large-v3}"
+
 read -r -d '' DEFAULT_SYSTEM_PROMPT <<'PROMPT_EOF'
 You are the cleanup stage of a voice dictation app (like Wispr Flow or Superwhisper).
 
@@ -546,6 +552,25 @@ LEARN_EOF
     debug_log "Learner: $accepted terms accepted, $rejected rejected"
 }
 
+# Wrap the vocabulary in running prose, in the language being dictated, so Whisper
+# is primed with a speaker rather than with a glossary. The carrier sentence is
+# deliberately dull and unrelated to any real request: whatever stands here can
+# leak into the transcript of a near-silent clip, so it must be something harmless
+# and obviously wrong rather than a plausible instruction.
+build_whisper_prompt() {
+    local vocab="$1"
+    local carrier
+
+    case "${LANGUAGE:0:2}" in
+        de) carrier="Kurze Notiz zum Projekt, bitte sauber mitschreiben. Wir arbeiten heute mit %s." ;;
+        "") carrier="A short note, please write it down properly. Today we are working with %s." ;;
+        *)  carrier="A short note, please write it down properly. Today we are working with %s." ;;
+    esac
+
+    # ~224 tokens is the cap and the carrier needs its share.
+    printf "$carrier" "${vocab:0:450}"
+}
+
 get_vocabulary_context() {
     local vocab
     vocab=$(get_vocabulary)
@@ -624,23 +649,32 @@ transcribe() {
         debug_log "Language set to: $LANGUAGE"
     fi
 
-    # Whisper's decoding prompt: biases the decoder towards this speaker's proper
-    # nouns, so "Subagenten" stops coming back as "SAP-Agenten" and "Playwright"
-    # as "Play-Red". Capped at ~224 tokens by the API, so keep the list short —
-    # anything longer is silently truncated from the FRONT (newest terms lost).
+    # Whisper's decoding prompt: text prepended as context, biasing the decoder
+    # towards this speaker's proper nouns. Capped at ~224 tokens by the API and
+    # truncated from the FRONT, so it stays short.
+    #
+    # It has to READ like speech. Whisper was trained to continue running text, so
+    # it copies the register of whatever it is primed with — fed a bare
+    # comma-separated word list, it starts emitting fragments. Measured on one
+    # clip of "Yo Claude, guck dir bitte die Logs an":
+    #   no prompt   → "Klart, guck dir die Loks an."
+    #   word list   → "Claude, Cucke Dilox an"        (name saved, sentence wrecked)
+    #   sentences   → "Klaude, guck dir die Logs an." (sentence intact)
+    # So the terms travel inside a sentence, never as a naked list.
     local vocab_args=()
     local vocab
     vocab=$(get_vocabulary)
     if [[ -n "$vocab" ]]; then
-        local hint="${vocab:0:600}"
+        local hint
+        hint=$(build_whisper_prompt "$vocab")
         vocab_args=(-F "prompt=$hint")
-        debug_log "Whisper vocabulary prompt (${#hint} chars): $hint"
+        debug_log "Whisper prompt (${#hint} chars): $hint"
     fi
 
     response=$(curl -s -X POST "https://api.groq.com/openai/v1/audio/transcriptions" \
         -H "Authorization: Bearer $GROQ_API_KEY" \
         -F "file=@$AUDIO_COMPRESSED" \
-        -F "model=whisper-large-v3-turbo" \
+        -F "model=$WHISPER_MODEL" \
         -F "response_format=json" \
         "${vocab_args[@]}" \
         $lang_param)
@@ -894,6 +928,21 @@ if [[ -f "$STATE_FILE" ]]; then
 
     # Save to database
     save_to_db "$transcript" "$formatted" "$WHISPER_DURATION_MS" "$LLM_DURATION_MS" "$TOTAL_MS" 1 ""
+
+    # Keep recent clips when asked. Without them, tuning the recogniser means
+    # guessing: the audio is gone the moment it is transcribed, so there is
+    # nothing to re-run a changed prompt or model against. Keeping only the LAST
+    # one is useless in practice — the next thing you say overwrites the case you
+    # were trying to fix.
+    # NB: no `local` here — this block runs at script level, not in a function.
+    if [[ "${KEEP_AUDIO:-false}" == "true" ]]; then
+        archive="$SCRIPT_DIR/recordings"
+        mkdir -p "$archive"
+        cp -f "$AUDIO_COMPRESSED" "$archive/$(date +%Y%m%d-%H%M%S).ogg" 2>/dev/null
+        cp -f "$AUDIO_COMPRESSED" "$SCRIPT_DIR/last-recording.ogg" 2>/dev/null
+        # Bounded: this is a debugging aid, not an archive of everything ever said.
+        ls -1t "$archive"/*.ogg 2>/dev/null | tail -n +${KEEP_AUDIO_COUNT:-20} | xargs -r rm -f
+    fi
 
     # Cleanup
     rm -f "$AUDIO_FILE" "$AUDIO_COMPRESSED" "${TIMING_FILE}-whisper" "${TIMING_FILE}-llm" "${TIMING_FILE}-whisper-error" "${TIMING_FILE}-llm-error"
