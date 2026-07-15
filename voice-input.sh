@@ -62,16 +62,30 @@ IS the cleaned text — no preamble, no comment, no markdown, no quotes around i
    No comma after a sentence-initial "Aber", "Und", "Also", "Okay", "Ja".
 
 2. SELF-CORRECTIONS — keep only the final intent
-   The speaker corrects himself mid-sentence. Drop the retracted version AND the
-   repair phrase itself ("nee", "quatsch", "sorry", "ich meine", "doch nicht", "also").
+   The speaker corrects himself. Drop the retracted version AND the repair phrase
+   itself ("nee", "ne doch", "doch erst", "ach nee", "quatsch", "sorry",
+   "ich meine", "doch nicht", "also").
    Input:  das meeting ist um fünf uhr ähm nee doch nicht um fünf um sieben
    Output: Das Meeting ist um sieben Uhr.
    Input:  schick das an tom quatsch an lisa
    Output: Schick das an Lisa.
    Input:  mach das in python also nee in rust
    Output: Mach das in Rust.
+
+   The repair often arrives AFTER a finished clause, trailing off the end. Collapse
+   it just the same — do not leave it dangling as an afterthought:
+   Input:  um 5 uhr möchte ich ins bett gehen ne doch erst um 7 uhr
+   Output: Um 7 Uhr möchte ich ins Bett gehen.
+   WRONG:  "Um 5 Uhr möchte ich ins Bett gehen, doch erst um 7 Uhr." ← not resolved
+
+   Correct ONLY the value the repair actually targets. Identical values elsewhere in
+   the sentence are untouched — the speaker corrected one of them, not all of them:
+   Input:  stell den wecker auf 5 uhr und um 5 uhr geh ich ins bett ne doch erst um 7
+   Output: Stell den Wecker auf 5 Uhr und um 7 Uhr geh ich ins Bett.
+   (the alarm stays at 5 — only the bedtime was repaired)
+
    A change of mind stated as such ("erst dachte ich X, aber jetzt Y") is content —
-   keep both. Only silent mid-sentence repairs get collapsed.
+   keep both. Only the speaker's own repairs get collapsed.
 
 3. DISFLUENCIES — remove
    - "ähm", "äh", "öhm", "hmm", "uh"
@@ -87,13 +101,20 @@ IS the cleaned text — no preamble, no comment, no markdown, no quotes around i
    from context, spelled correctly. Only when unambiguous — never "fix" an ordinary
    word into a technical one.
 
-6. GARBLED PASSAGES — leave them garbled
-   Some stretches are mistranscribed past repair. Punctuate them and move on. Do NOT
-   invent a plausible completion — a smooth sentence the speaker never said is worse
-   than an obviously broken one they can spot and fix.
+6. GARBLED PASSAGES — do not invent your way out
+   This is about stretches whose MEANING is unrecoverable. Punctuate them and move
+   on: a smooth sentence the speaker never said is worse than an obviously broken
+   one they can spot and fix themselves.
    Input:  sondern wozu sozusagen dein trainer bzw das gym und ja das ist wir heute sage
    Output: …sondern sozusagen dein Trainer bzw. das Gym und ja, das ist wir heute sage.
    WRONG:  "…sondern dein Trainer bzw. das Gym die Inhalte bestimmt." ← invented
+
+   This is NOT about single misheard words. One word the context makes obvious is a
+   mishearing to repair (rule 4), not a passage to preserve:
+   Input:  ich möchte den wecker auf 5 uhr schilz
+   Output: Ich möchte den Wecker auf 5 Uhr stellen.
+   The line: restoring a word the speaker plainly said is your job. Manufacturing a
+   statement they never made is never your job.
 
 5. VOICE COMMANDS — execute and remove
    "Absatz" / "neue Zeile" → line break
